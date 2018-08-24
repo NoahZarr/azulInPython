@@ -12,11 +12,17 @@ import sys
 #1-5 = colored tiles
 #6 = first center marker
 
-#SETTINGS
-firstMarker = 6
+#constants
+FIRST_MARKER = 6
+TILES_PER_FACTORY = 4
+PLAYERS_TO_FACTORIES = {1:3, 2:5, 3:7, 4:9}
+NUM_PLAYERS = 1
+'''
+TODO
+prevent people picking the center when there is only the first player token there
+or factories when there are no tiles
 
-
-#GITTEST
+'''
 #CLASSES
 
 
@@ -57,8 +63,8 @@ class boardCenter(tileDrop):
     def selectTiles(self, color):
         selectedTiles, otherTiles = super().selectTiles(color)
         
-        if firstMarker in self.tiles:
-            selectedTiles = selectedTiles + [firstMarker]
+        if FIRST_MARKER in self.tiles:
+            selectedTiles = selectedTiles + [FIRST_MARKER]
         
         self.tiles = [t for t in self.tiles if t not in selectedTiles]
         
@@ -99,8 +105,8 @@ class publicBoard():
         if remainingTiles > 0:
             print("Can't deal until all tiles have been selected!")
         else:
-            [factory.addTiles(self.bag.draw(4)) for factory in self.factories]
-            self.center.addTiles([firstMarker])
+            [factory.addTiles(self.drawFromBag(TILES_PER_FACTORY)) for factory in self.factories]
+            self.center.addTiles([FIRST_MARKER])
             
     def drawFromBag(self, numToDraw):
         drawnTiles = []
@@ -110,9 +116,18 @@ class publicBoard():
                 shuffle(self.bag)
                 self.discard = []
             
-            drawnTiles.extend(self.bag.pop())
+            drawnTiles.append(self.bag.pop())
             
         return drawnTiles
+    
+    def getValidChoices(self):
+        #determine which tile drops can be selected to gain tiles
+        
+        validChoices = [str(fnum + 1) for fnum, fact in enumerate(self.factories) if len(fact.tiles) > 0]
+        
+        if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
+            validChoices.append('c')
+        return validChoices
             
         
                 
@@ -127,7 +142,7 @@ class publicBoard():
     def checkRoundEnd(self):
         maxFactoryTiles = max([len(p) for p in [f.tiles for f in self.factories]])
         
-        if maxFactoryTiles == 0 and len(self.center.tiles) == 0:
+        if maxFactoryTiles == 0 and len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) == 0:
             return(True)
         else:
             return(False)
@@ -158,6 +173,8 @@ class playerBoard():
         
     def roundScore(self, newIndices):
         roundPoints= 0
+        
+        #get points for placing new tiles
         for newIdx in newIndices:
             curRow, curCol = newIdx
             roundPoints += 1
@@ -187,7 +204,14 @@ class playerBoard():
                 if self.wall[row][curCol] == 0:
                     break
                 else:
-                    roundPoints += 1        
+                    roundPoints += 1
+                    
+        #add floor penalty
+        floorPairs = zip([int(tile > 0) for tile in self.floorLine], self.floorPenalties)
+        
+        penalty = sum(floorPair[0]*floorPair[1] for floorPair in floorPairs)
+        roundPoints += penalty
+        
         return(roundPoints)
             
         
@@ -206,7 +230,18 @@ class playerBoard():
         
         #calculate round score
         self.score += self.roundScore(addedIndices)
-        return(addedIndices)
+        
+        #remove tiles from load and floor
+        loadRowsToClear = [indices[0] for indices in addedIndices]
+        discardedTiles = []
+        for loadRow in loadRowsToClear:
+            discardedTiles.extend([tile for tile in self.load[loadRow] if tile > 0])
+            self.load[loadRow] = [0 for tile in self.load[loadRow]]
+        
+        discardedTiles.extend([tile for tile in self.floorLine if tile > 0 and tile != FIRST_MARKER])
+        self.floorLine = [0 for tile in self.floorLine]
+    
+        return(discardedTiles)
 
             
         
@@ -225,23 +260,39 @@ class playerBoard():
         
         else:
             
-            if firstMarker in newTiles:
+            if FIRST_MARKER in newTiles:
                 firstOpenSpot = min(i for i,e in enumerate(self.floorLine) if e == 0)
-                self.floorLine[firstOpenSpot] = firstMarker
-                newTiles = [t for t in newTiles if t != firstMarker]
+                self.floorLine[firstOpenSpot] = FIRST_MARKER
+                newTiles = [t for t in newTiles if t != FIRST_MARKER]
             
             curRowNum = int(row)-1
             curLoadRow = self.load[curRowNum]    
             curWallRow = self.wall[curRowNum]
-            if any(t > 0 and t not in newTiles for t in curLoadRow):
+            if any(tile > 0 and tile not in newTiles for tile in curLoadRow):
                 message = 'That loading row already has tiles of a different color! Try again.'               
-            elif any(e == newTiles[0] for e in curWallRow):
+            elif any(tile == newTiles[0] for tile in curWallRow):
                 message = 'That wall row already has that color tile! Try again.'
             else:
-                numSpotsFree = len([s for s in curLoadRow if s == 0])
-                numAddedTiles = min(numSpotsFree, len(newTiles))
+                #numSpotsFree = len([s for s in curLoadRow if s == 0])
+                #numAddedTiles = min(numSpotsFree, len(newTiles)) #problem w/ this logic, combined w/ indexing below
+                freeSpots = reversed([ix for ix, tile in enumerate(curLoadRow) if tile == 0])
                 
-                curLoadRow[len(curLoadRow) - numAddedTiles:] = [newTiles.pop() for t in range(numAddedTiles)]
+                
+                #curLoadRow[len(curLoadRow) - numAddedTiles:] = [newTiles.pop() for t in range(numAddedTiles)]
+                '''
+                for tileNum in range(len(newTiles)):
+                    try:
+                        newTileIdx = freeSpots[tileNum]
+                    except IndexError:
+                        break
+                    curLoadRow[newTileIdx] = newTiles.pop()
+                    '''
+                    
+                for spot in freeSpots:
+                    if len(newTiles) == 0:
+                        break
+                    curLoadRow[spot] = newTiles.pop()
+                
                 message = 'Where do you want to put your remaining tiles? They are {}'.format(newTiles)
                 
             
@@ -270,8 +321,8 @@ class game():
     '''class containing public and private boards; handles player input'''
     def __init__(self, tileDuplicates = 20, numPlayers = 2):
         
-        playersToFactories = {1:1, 2:5, 3:7, 4:9}
-        self.numFactories = playersToFactories[numPlayers]
+       
+        self.numFactories = PLAYERS_TO_FACTORIES[numPlayers]
         
         self.numPlayers = numPlayers
         self.publicBoard = publicBoard(tileDuplicates, self.numFactories) #
@@ -313,12 +364,16 @@ class game():
             
             #place tiles
             for p in range(self.numPlayers):
-                removedTiles = self.playerBoards[p].roundEnd()
-                discardedTiles.extend(removedTiles)
+                
+                #do playerboard round end procedure and return tiles to discard
+                playerDiscardedTiles = self.playerBoards[p].roundEnd()
+                discardedTiles.extend(playerDiscardedTiles)
                 
             
             #dicard tiles
-            self.publicBoard.discard.extend(discardedTiles)    
+            self.publicBoard.discard.extend(discardedTiles)
+            self.publicBoard.deal()
+
             
     def checkGameOver(self):
         completeRows = [p.getNumCompleteRows() > 0 for p in self.playerBoards]
@@ -349,8 +404,8 @@ class game():
 
         while len(remainingTiles) > 0:
             print(inputMessage)
-            targetRow = self.checkInput(validChars=['f'] + list(range(5)))              
-            [inputMessage, remainingTiles] = self.playerBoards[player].addTiles(selectedTiles, targetRow)
+            targetRow = self.checkInput(validChars=['f'] + list(range(1,6)))              
+            [inputMessage, remainingTiles] = self.playerBoards[player].addTiles(remainingTiles, targetRow)
         
         
     
@@ -367,8 +422,9 @@ class game():
         while len(selectedTiles) == 0:
             print("Enter the number of the factory you want to select or enter"
                   " \n'c' to pick from the center.")
+            
        
-            pileSelection = self.checkInput(validChars = ['c'] + [str(f+1) for f in range(self.numFactories)])
+            pileSelection = self.checkInput(validChars = self.publicBoard.getValidChoices())
                         
             
             print('Ok, what color? ')
@@ -397,10 +453,9 @@ class game():
         
 #b = playerBoard()
 #b.disp()
-
-g=game(numPlayers = 1)
-#g.publicBoard.checkRoundEnd()
-g.mainLoop()
+if __name__ == '__main__':
+    g=game(numPlayers = NUM_PLAYERS)
+    g.mainLoop()
 '''
 x = g.playerBoards[0]
 x.load[0]=[4]
