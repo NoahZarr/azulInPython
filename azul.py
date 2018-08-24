@@ -20,16 +20,6 @@ firstMarker = 6
 #CLASSES
 
 
-class tileBag():
-    
-    def __init__(self, numDuplicates):
-        self.tiles = list(range(1,6)) * numDuplicates
-        shuffle(self.tiles)
-        
-    def draw(self, numDraw):
-        return [self.tiles.pop() for d in range(numDraw)]
-
-
 class tileDrop():
     def __init__(self):
         self.tiles = []
@@ -82,7 +72,8 @@ class publicBoard():
     '''sets up and handles factories, tile bag, and center'''
     
     def __init__(self, numDuplicateTiles, numFactories):
-        self.bag = tileBag(numDuplicateTiles)
+        self.bag = list(range(1,6)) * numDuplicateTiles
+        shuffle(self.bag)
         self.factories = [factory() for f in range(numFactories)]
         self.center = boardCenter()
         self.discard = []
@@ -112,8 +103,16 @@ class publicBoard():
             self.center.addTiles([firstMarker])
             
     def drawFromBag(self, numToDraw):
+        drawnTiles = []
         for drawIdx in range(numToDraw):
-            try
+            if len(self.bag) == 0:
+                self.bag = self.discard
+                shuffle(self.bag)
+                self.discard = []
+            
+            drawnTiles.extend(self.bag.pop())
+            
+        return drawnTiles
             
         
                 
