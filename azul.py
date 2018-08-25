@@ -32,7 +32,7 @@ class tileDrop():
         
     def selectTiles(self, color):
         if color not in self.tiles:
-            print('That color is not in that pile, you doofus!')
+            print('That color is not in that pile, you doofus! \nAlso you should not be seeing this message.')
             return [[],[]]
         else:
             selectedTiles = [t for t in self.tiles if t==color]
@@ -122,6 +122,7 @@ class publicBoard():
             
         return drawnTiles
     
+    '''
     def getValidChoices(self):
         #determine which tile drops can be selected to gain tiles
         
@@ -130,35 +131,35 @@ class publicBoard():
         if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
             validChoices.append('c')
         return validChoices
+    '''
     
-    def validatePileChoice(pileChoice, self):
+    def validateChoices(self, pileChoice, colorChoice = None):
         
-        validChoices = [str(fnum + 1) for fnum, fact in enumerate(self.factories) if len(fact.tiles) > 0]
+        extantPiles = [str(fnum + 1) for fnum, fact in enumerate(self.factories)] + ['c']
+        if pileChoice not in extantPiles:
+            return("C'mon man, pile {} doesn't even exist!".format(pileChoice))
         
+        tiledPiles = [str(fnum + 1) for fnum, fact in enumerate(self.factories) if len(fact.tiles) > 0]
+    
         if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
-            validChoices.append('c')
+            tiledPiles.append('c')
+        
+        if pileChoice not in tiledPiles:
+            return('Not enough tiles pile {}! Try again.'.format(pileChoice))
             
-        if pileChoice in validChoices:
-            errorMessage = ''
-        else:
-            errorMessage = 'Not enough tiles there! Try again.'
-        
-        return(errorMessage)
-        
-        
-    def validateColorChoice(pileChoice, colorChoice, self):
-        validChoices = [str(fnum + 1) for fnum, fact in enumerate(self.factories) if len(fact.tiles) > 0]
-        
-        if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
-            validChoices.append('c')
+        if colorChoice is not None:
+            try:
+                pileTiles = self.factories[int(pileChoice) - 1].tiles
+            except ValueError:
+                pileTiles = self.center.tiles
             
-        if pileChoice in validChoices:
-            errorMessage = ''
-        else:
-            errorMessage = 'Not enough tiles there! Try again.'
+            if colorChoice not in [str(t) for t in pileTiles]:
+                return("There aren't any tiles of color {} in pile {}".format(colorChoice, pileChoice))
+                
         
-        return(errorMessage)
-        
+        return('')
+    
+
                 
     def disp(self):
         print('Board')
@@ -322,10 +323,20 @@ class playerBoard():
                         break
                     curLoadRow[spot] = newTiles.pop()
                 
-                message = 'Where do you want to put your remaining tiles? They are {}'.format(newTiles)
+                #message = 'Where do you want to put your remaining tiles? They are {}'.format(newTiles)
                 
             
         return(message, newTiles)
+        
+        
+    def validateChoices(selectedTiles, targetRow):
+        extantRows = [str(i+1) for i in range(5)] + ['f']
+        if targetRow not in extantRows:
+            return('There is no row named {}! Try again.'.targetRow)
+        
+        
+        
+        return('')
     
     
     def getNumCompleteRows(self):        
@@ -433,11 +444,6 @@ class game():
         
     
     def getPlayerInput(self, player=1):
-        #should this be a method of publicBoard?
-        #here the validity checking is done within game,
-        #but for load row selection the checkign is done within playerBoard
-        #but I guess some checking is also done in public board, e.g. to see
-        #if there are any of the right color
         
         selectedTiles = []
         print('\nPlayer {} it is your turn.'.format(player+1))
@@ -452,41 +458,55 @@ class game():
         while len(errorMessage) > 0:
             firstInput = self.checkInput(maxLength = 3)
             pileSelection = list(firstInput)[0]         
-            errorMessage = self.publicBoard.validatePileChoice(pileSelection)
+            errorMessage = self.publicBoard.validateChoices(pileSelection)
             print(errorMessage)
             
 
         if len(firstInput) > 1:
             colorSelection = firstInput[1]     
-            errorMessage = self.publicBoard.validateColorChoice(pileSelection, colorSelection)                 
+            errorMessage = self.publicBoard.validateChoices(pileSelection, colorSelection)
+            print(errorMessage)                 
         else:
             errorMessage = '_'
 
         while len(errorMessage) > 0:               
-            print('Ok, what color? ')
+            print('Which color would you like from pile {}?'.format(pileSelection))
             colorSelection = self.checkInput(validChars = range(1,6), maxLength = 1)[0] #add error checking
-            errorMessage = self.publicBoard.validateColorChoice(pileSelection, colorSelection)
-
+            errorMessage = self.publicBoard.validateChoices(pileSelection, colorSelection)
+            print(errorMessage)
         
 
         
         selectedTiles = self.publicBoard.selectTiles(pileSelection, int(colorSelection))
         
-        print('You picked {0}'.format(selectedTiles))
-    
-        
-        remainingTiles = selectedTiles
+
         
         if len(firstInput) > 2:
             targetRow = firstInput[2]
-        else:       
-            inputMessage = 'Which row do you want to put them in?'
-            while len(remainingTiles) > 0:
-                print(inputMessage)
-                targetRow = self.checkInput(validChars=['f'] + list(range(1,6)))[0]              
+            errorMessage = self.playerBoards[player].validateChoices(selectedTiles, targetRow)
+            print(errorMessage)
+        else:
+            errorMessage = '_'
+            
+        while len(errorMessage) > 0:
+            print('Which row do you want to put {} in?'.format(selectedTiles))
+            targetRow = self.checkInput(validChars=['f'] + list(range(1,6)), maxLength = 1)[0] 
+            errorMessage = self.playerBoards[player].validateChoices(selectedTiles, targetRow)
+            print(errorMessage)
+            
+        
+        remainingTiles = self.playerBoards[player].addTiles(selectedTiles, targetRow) #add error checking?
+    
+            
+        while len(remainingTiles) > 0:    
+            print('Where do you want to put your remaining tiles, {}?'.format(remainingTiles))
+            errorMessage = '_'
+            while len(errorMessage) > 0:              
+                 errorMessage = self.playerBoards[player].validateChoices(remainingTiles, targetRow)              
+                 print(errorMessage)
+            remainingTiles = self.playerBoards[player].addTiles(remainingTiles, targetRow)      
+                 
                 
-                
-        [inputMessage, remainingTiles] = self.playerBoards[player].addTiles(remainingTiles, targetRow) #add error checking?
         
         
         
@@ -533,6 +553,7 @@ class game():
 if __name__ == '__main__':
     g=game(numPlayers = NUM_PLAYERS)
     g.mainLoop()
+    #b = g.publicBoard
     #g.checkInput(message='>', validChars = [1,2,3], maxLength=3)
 '''
 x = g.playerBoards[0]
