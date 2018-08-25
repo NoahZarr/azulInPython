@@ -7,6 +7,7 @@ Created on Sun Aug 19 10:42:48 2018
 
 from random import shuffle 
 import sys
+from ipython_exit import exit
 
 #0 = no tiles
 #1-5 = colored tiles
@@ -15,12 +16,13 @@ import sys
 #constants
 FIRST_MARKER = 6
 TILES_PER_FACTORY = 4
-PLAYERS_TO_FACTORIES = {1:3, 2:5, 3:7, 4:9}
+PLAYERS_TO_FACTORIES = {1:2, 2:5, 3:7, 4:9}
 NUM_PLAYERS = 1
+
 '''
 TODO
-move input verification to public and private board functions
-allow combination input (e.g. 1,2,3)
+
+fix roundScore code
 
 '''
 #CLASSES
@@ -30,14 +32,10 @@ class tileDrop():
     def __init__(self):
         self.tiles = []
         
-    def selectTiles(self, color):
-        if color not in self.tiles:
-            print('That color is not in that pile, you doofus! \nAlso you should not be seeing this message.')
-            return [[],[]]
-        else:
-            selectedTiles = [t for t in self.tiles if t==color]
-            otherTiles = [t for t in self.tiles if t!=color]
-            return(selectedTiles, otherTiles)
+    def selectTiles(self, color):     
+        selectedTiles = [t for t in self.tiles if t==color]
+        otherTiles = [t for t in self.tiles if t!=color]
+        return(selectedTiles, otherTiles)
     
     def addTiles(self, newTiles):
         self.tiles = self.tiles + newTiles
@@ -68,7 +66,6 @@ class boardCenter(tileDrop):
         
         self.tiles = [t for t in self.tiles if t not in selectedTiles]
         
-        print(selectedTiles)
         return(selectedTiles)
         
     
@@ -122,17 +119,7 @@ class publicBoard():
             
         return drawnTiles
     
-    '''
-    def getValidChoices(self):
-        #determine which tile drops can be selected to gain tiles
-        
-        validChoices = [str(fnum + 1) for fnum, fact in enumerate(self.factories) if len(fact.tiles) > 0]
-        
-        if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
-            validChoices.append('c')
-        return validChoices
-    '''
-    
+
     def validateChoices(self, pileChoice, colorChoice = None):
         
         extantPiles = [str(fnum + 1) for fnum, fact in enumerate(self.factories)] + ['c']
@@ -155,8 +142,7 @@ class publicBoard():
             
             if colorChoice not in [str(t) for t in pileTiles]:
                 return("There aren't any tiles of color {} in pile {}".format(colorChoice, pileChoice))
-                
-        
+                       
         return('')
     
 
@@ -187,24 +173,69 @@ class playerBoard():
         self.load = [[0] * row for row in range(1,6)]
         self.score = 0
         
-    def disp(self):
-        numFloorSpaces = [12, 9, 6, 3, 0]
-        dispLoad = [' ' * n + str(e) for e, n in zip(self.load, numFloorSpaces)]
+    def validateChoices(self, selectedTiles, targetRow):
+        if len(set([tile for tile in selectedTiles if tile != FIRST_MARKER])) > 1:
+            return('Somehow you grabbed multiple tile colors!')
         
-        print('  Loading Area        Wall         Template')
-        [print('{} {} {}'.format(row[0], row[1], row[2])) for row in zip(dispLoad, self.wall, self.wallTemplate)] #change to letters later?
-       
-        print('\n')
-        print('{} {}'.format('Penalties', self.floorPenalties))
+        extantRows = [str(i+1) for i in range(5)] + ['f']
+        if targetRow not in extantRows:
+            return('There is no row named {}! Try again.'.targetRow)
         
-
-        print('{} {} '.format('Floor    ', str(self.floorLine).replace(',', ', ')))
-        print('Current Score: {}'.format(self.score))
+        if targetRow == 'f':
+            numFloorSpots = len([e for e in self.floorLine if e == 0])
+            if len(selectedTiles) > numFloorSpots:
+                return('Wow you really screwed up. Theres not enough'
+                ' room in your floor! Not even sure what to do...')
+                    
+        else:
+            curRowNum = int(targetRow)-1
+            curLoadRow = self.load[curRowNum]    
+            curWallRow = self.wall[curRowNum]
+        
+        
+            if any(tile > 0 and tile not in selectedTiles for tile in curLoadRow):
+                    return('That loading row already has tiles of a different color! Try again.')               
+            elif any(tile == selectedTiles[0] for tile in curWallRow):
+                    return('That wall row already has that color tile! Try again.')
+        
+        return('')     
+     
+    def loadTiles(self, newTiles, row):
+        '''attempts to add tiles to a particular row of loading area; returns remaining tiles'''
+        
+        if row == 'f':
+            firstOpenSpot = min(i for i,e in enumerate(self.floorLine) if e == 0)
+            self.floorLine[firstOpenSpot:firstOpenSpot+len(newTiles)] = newTiles
+            newTiles = []
+        
+        else:
+            
+            if FIRST_MARKER in newTiles:
+                firstOpenSpot = min(i for i,e in enumerate(self.floorLine) if e == 0)
+                self.floorLine[firstOpenSpot] = FIRST_MARKER
+                newTiles = [t for t in newTiles if t != FIRST_MARKER]
+            
+            curRowNum = int(row)-1
+            curLoadRow = self.load[curRowNum]    
+          
+            freeSpots = reversed([ix for ix, tile in enumerate(curLoadRow) if tile == 0])
+            
+                       
+            for spot in freeSpots:
+                if len(newTiles) == 0:
+                    break
+                curLoadRow[spot] = newTiles.pop()                
+            
+        return(newTiles)    
+    
+    
+    
         
     def roundScore(self, newIndices):
+        '''calculates end of round score'''
         roundPoints= 0
         
-        #get points for placing new tiles
+        #get points for placing new tiles; make this code better?
         for newIdx in newIndices:
             curRow, curCol = newIdx
             roundPoints += 1
@@ -215,6 +246,7 @@ class playerBoard():
                     break
                 else:
                     roundPoints += 1
+                    
             #check to the right        
             for col in range(curCol + 1, 5, 1):
                 if self.wall[curRow][col] == 0:
@@ -243,8 +275,7 @@ class playerBoard():
         roundPoints += penalty
         
         return(roundPoints)
-            
-        
+                  
         
     def roundEnd(self):
         
@@ -273,71 +304,12 @@ class playerBoard():
     
         return(discardedTiles)
 
-            
-        
-    def addTiles(self, newTiles, row):
-        '''attempts to add tiles to a particular row; returns outcome and remaining tiles'''
-        
-        if row == 'f':
-            if len(newTiles) > len([e for e in self.floorLine if e == 0]):
-                message = ('Wow you really screwed up. Theres not enough'
-                ' room in your floor! Not even sure what to do...')
-            else:
-                firstOpenSpot = min(i for i,e in enumerate(self.floorLine) if e == 0)
-                self.floorLine[firstOpenSpot:firstOpenSpot+len(newTiles)] = newTiles
-                newTiles = []
-                message = 'You shouldnt be seeing this message, line 149'
-        
-        else:
-            
-            if FIRST_MARKER in newTiles:
-                firstOpenSpot = min(i for i,e in enumerate(self.floorLine) if e == 0)
-                self.floorLine[firstOpenSpot] = FIRST_MARKER
-                newTiles = [t for t in newTiles if t != FIRST_MARKER]
-            
-            curRowNum = int(row)-1
-            curLoadRow = self.load[curRowNum]    
-            curWallRow = self.wall[curRowNum]
-            if any(tile > 0 and tile not in newTiles for tile in curLoadRow):
-                message = 'That loading row already has tiles of a different color! Try again.'               
-            elif any(tile == newTiles[0] for tile in curWallRow):
-                message = 'That wall row already has that color tile! Try again.'
-            else:
-                #numSpotsFree = len([s for s in curLoadRow if s == 0])
-                #numAddedTiles = min(numSpotsFree, len(newTiles)) #problem w/ this logic, combined w/ indexing below
-                freeSpots = reversed([ix for ix, tile in enumerate(curLoadRow) if tile == 0])
-                
-                
-                #curLoadRow[len(curLoadRow) - numAddedTiles:] = [newTiles.pop() for t in range(numAddedTiles)]
-                '''
-                for tileNum in range(len(newTiles)):
-                    try:
-                        newTileIdx = freeSpots[tileNum]
-                    except IndexError:
-                        break
-                    curLoadRow[newTileIdx] = newTiles.pop()
-                    '''
-                    
-                for spot in freeSpots:
-                    if len(newTiles) == 0:
-                        break
-                    curLoadRow[spot] = newTiles.pop()
-                
-                #message = 'Where do you want to put your remaining tiles? They are {}'.format(newTiles)
-                
-            
-        return(message, newTiles)
-        
-        
-    def validateChoices(selectedTiles, targetRow):
-        extantRows = [str(i+1) for i in range(5)] + ['f']
-        if targetRow not in extantRows:
-            return('There is no row named {}! Try again.'.targetRow)
-        
-        
-        
-        return('')
-    
+             
+    def addBonuses(self):
+        '''adds end of game bonuses to score'''
+        self.score += self.getNumCompleteRows() * 2
+        self.score += self.getNumCompleteCols() * 7
+        self.score += self.getNumCompleteColors() * 10
     
     def getNumCompleteRows(self):        
         return sum([all([tile > 0 for tile in self.wall[row]]) for row in range(5)])
@@ -350,11 +322,21 @@ class playerBoard():
         [allTiles.extend(row) for row in self.wall]
         numEachColor = [sum([tile == color for tile in allTiles]) for color in range(1,6)]
         return sum([count == 5 for count in numEachColor])
-    
-    def addBonuses(self):
-        self.score += self.getNumCompleteRows() * 2
-        self.score += self.getNumCompleteCols() * 7
-        self.score += self.getNumCompleteColors() * 10
+        
+        
+    def disp(self):
+        numFloorSpaces = [12, 9, 6, 3, 0]
+        dispLoad = [' ' * n + str(e) for e, n in zip(self.load, numFloorSpaces)]
+        
+        print('  Loading Area        Wall         Template')
+        [print('{} {} {}'.format(row[0], row[1], row[2])) for row in zip(dispLoad, self.wall, self.wallTemplate)] #change to letters later?
+       
+        print('\n')
+        print('{} {}'.format('Penalties', self.floorPenalties))
+        
+
+        print('{} {} '.format('Floor    ', str(self.floorLine).replace(',', ', ')))
+        print('Current Score: {}'.format(self.score))    
             
         
 class game():
@@ -377,22 +359,18 @@ class game():
         while not quitLoop:
             for player in range(self.numPlayers):
                 self.displayBoard(player)
-                
-                #selectedTiles = self.getPlayerTileSelection(player)
-                
-                #self.getPlayerRowSelection(player, selectedTiles)
-                
+                                              
                 self.getPlayerInput(player)
                 
                 self.checkRoundEnd()
                 
-                self.checkGameOver()
+                quitLoop = self.checkGameOver()
           
     def checkRoundEnd(self):
         roundIsOver = self.publicBoard.checkRoundEnd()
 
         if roundIsOver:
-            print('\nThe round is over!\n')
+            print('#######################\n   The round is over!\n#######################\n')
             
             discardedTiles = []
             
@@ -413,41 +391,33 @@ class game():
         completeRows = [p.getNumCompleteRows() > 0 for p in self.playerBoards]
                
         if any(completeRows):
-            [p.addBonuses for p in self.playerBoards]
+            print('#######################\n   The game is over!\n#######################\n')
+            
+            [p.addBonuses() for p in self.playerBoards]
             scores = [p.score for p in self.playerBoards]       
             verbs = ['won', 'lost', 'was embarrassed', 'utterly failed']
             
-            playerScoreOrder =sorted(range(len(scores), key = scores.__getitem__, reverse=True))
+            playerScoreOrder =sorted(range(len(scores)), key = scores.__getitem__, reverse=True)
             
             for place, playerIdx in enumerate(playerScoreOrder):
-                print('Player {} {} with {} points'.format(playerIdx + 1, verbs[place], [scores[playerIdx]]))
+                print('Player {} {} with {} points'.format(playerIdx + 1, verbs[place], scores[playerIdx]))
             
+            return(True)
+        else:
+            return(False)
                 
     
     def displayBoard(self, player = -1):
         g.publicBoard.disp()
         if player > -1:
+            
+            print('=================\n    Player {}\n=================\n'.format(player+1))
+            
             g.playerBoards[player].disp()
             
-    '''        
-    def getPlayerRowSelection(self, player=1, selectedTiles=[]):
-        #structure definitely needs to be reworked
-        remainingTiles = selectedTiles
-        inputMessage = 'Which row do you want to put them in?'
-
-
-        while len(remainingTiles) > 0:
-            print(inputMessage)
-            targetRow = self.checkInput(validChars=['f'] + list(range(1,6)))              
-            [inputMessage, remainingTiles] = self.playerBoards[player].addTiles(remainingTiles, targetRow)
-    '''    
-        
     
     def getPlayerInput(self, player=1):
-        
-        selectedTiles = []
-        print('\nPlayer {} it is your turn.'.format(player+1))
-        
+                
             
         print("Enter the number of the factory you want to select or enter"
           " \n'c' to pick from the center. If you already know the color\n"
@@ -495,16 +465,18 @@ class game():
             print(errorMessage)
             
         
-        remainingTiles = self.playerBoards[player].addTiles(selectedTiles, targetRow) #add error checking?
+        remainingTiles = self.playerBoards[player].loadTiles(selectedTiles, targetRow) #add error checking?
     
             
-        while len(remainingTiles) > 0:    
+        while len(remainingTiles) > 0:
+            self.playerBoards[player].disp()
             print('Where do you want to put your remaining tiles, {}?'.format(remainingTiles))
             errorMessage = '_'
-            while len(errorMessage) > 0:              
+            while len(errorMessage) > 0:
+                 targetRow = self.checkInput(validChars=['f'] + list(range(1,6)), maxLength = 1)[0]
                  errorMessage = self.playerBoards[player].validateChoices(remainingTiles, targetRow)              
                  print(errorMessage)
-            remainingTiles = self.playerBoards[player].addTiles(remainingTiles, targetRow)      
+            remainingTiles = self.playerBoards[player].loadTiles(remainingTiles, targetRow)      
                  
                 
         
@@ -529,59 +501,40 @@ class game():
         
         
             if inVals[0] == 'q':
-                    sys.exit(0)
+                                        
+                    exit() #should use custom ipython_exit
+                    print('CUSTOM EXIT FAILED')                    
+                    sys.exit(0) #backup
+                    
             print(errorMessage)
             
         return(inVals)
-        
-    
-
-        
-        
-        
-        
                     
-    
-#INITIAL SETUP            
-#p = publicBoard(4, 4)
-#p.deal()
-#p.disp()
-        
-        
-#b = playerBoard()
-#b.disp()
+            
 if __name__ == '__main__':
     g=game(numPlayers = NUM_PLAYERS)
     g.mainLoop()
-    #b = g.publicBoard
-    #g.checkInput(message='>', validChars = [1,2,3], maxLength=3)
-'''
-x = g.playerBoards[0]
-x.load[0]=[4]
-x.load[1]=[2,2]
-x.load[2]=[0,5,5]
+    
 
-x.wall[0] = [9 for e in x.wall[0]]
-x.wall[1] = [9 for e in x.wall[0]]
+    
+    
+#Test stuff
+'''    
+testWall1 = [[1, 2, 3, 4, 5],
+            [0, 1, 0, 0, 0],
+            [0, 0, 1, 0, 0],
+            [0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 1]]        
+        
 
-x.wall[2][2]=9
-x.wall[3][2]=8
-x.wall[4][2]=8
+testWall2 = [[1, 2, 3, 4, 5],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0],
+            [0, 0, 0, 0, 1]] 
 
-x.disp()
-#x.roundEnd()
-x.disp()
-#newTiles=[2,2,2,2,2,2]
-#x.addTiles(newTiles, 2)
-'''
-#GRAVEYARD
-'''
-def disp(self):
-        print('Wall - Template')
-        [print('{} {}'.format(row[0], row[1])) for row in zip(self.wall, self.wallTemplate)] #change to letters later?
-        print('Loading Area')
-        [print(row) for row in self.load]
-        print('Floor')
-        print(self.floorLine)
-        print('Current Score: {}'.format(self.score))
+
+#g.playerBoards[0].wall = testWall1
+#g.playerBoards[1].wall = testWall2
+#g.checkGameOver()
 '''
