@@ -19,8 +19,8 @@ PLAYERS_TO_FACTORIES = {1:3, 2:5, 3:7, 4:9}
 NUM_PLAYERS = 1
 '''
 TODO
-prevent people picking the center when there is only the first player token there
-or factories when there are no tiles
+move input verification to public and private board functions
+allow combination input (e.g. 1,2,3)
 
 '''
 #CLASSES
@@ -84,19 +84,21 @@ class publicBoard():
         self.center = boardCenter()
         self.discard = []
         
-    def selectTiles(self, tileDrop, color):
-        if tileDrop == -1:
+    def selectTiles(self, tileDropLabel, color):
+        if tileDropLabel == 'c':
             selectedTiles = self.center.selectTiles(color)
             
         else:
+            tileDropNum = int(tileDropLabel) - 1
             
             try:
-                selectedTiles, otherTiles = self.factories[tileDrop].selectTiles(color)
+                selectedTiles, otherTiles = self.factories[tileDropNum].selectTiles(color)
                 self.center.addTiles(otherTiles)
                 
             except IndexError:
-                print('Tile selection location misspecified!')
+                print('Wtf this input should already have been validated!')
                 selectedTiles = []
+                
         return(selectedTiles)
                 
                 
@@ -128,7 +130,34 @@ class publicBoard():
         if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
             validChoices.append('c')
         return validChoices
+    
+    def validatePileChoice(pileChoice, self):
+        
+        validChoices = [str(fnum + 1) for fnum, fact in enumerate(self.factories) if len(fact.tiles) > 0]
+        
+        if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
+            validChoices.append('c')
             
+        if pileChoice in validChoices:
+            errorMessage = ''
+        else:
+            errorMessage = 'Not enough tiles there! Try again.'
+        
+        return(errorMessage)
+        
+        
+    def validateColorChoice(pileChoice, colorChoice, self):
+        validChoices = [str(fnum + 1) for fnum, fact in enumerate(self.factories) if len(fact.tiles) > 0]
+        
+        if len([tile for tile in self.center.tiles if tile != FIRST_MARKER]) > 0:
+            validChoices.append('c')
+            
+        if pileChoice in validChoices:
+            errorMessage = ''
+        else:
+            errorMessage = 'Not enough tiles there! Try again.'
+        
+        return(errorMessage)
         
                 
     def disp(self):
@@ -329,15 +358,7 @@ class game():
         self.publicBoard.deal()
         self.playerBoards = [playerBoard() for p in range(numPlayers)]
         
-    @staticmethod
-    def checkInput(message = '> ', validChars = []):
-        inVal = input(message)
-        while inVal not in [str(c) for c in validChars]:
-            if inVal == 'q':
-                    sys.exit(0)
-            print('Invalid input, try again!')
-            inVal = input(message)
-        return(inVal)
+   
         
     def mainLoop(self):
         
@@ -346,9 +367,11 @@ class game():
             for player in range(self.numPlayers):
                 self.displayBoard(player)
                 
-                selectedTiles = self.getPlayerTileSelection(player)
+                #selectedTiles = self.getPlayerTileSelection(player)
                 
-                self.getPlayerRowSelection(player, selectedTiles)
+                #self.getPlayerRowSelection(player, selectedTiles)
+                
+                self.getPlayerInput(player)
                 
                 self.checkRoundEnd()
                 
@@ -395,7 +418,7 @@ class game():
         if player > -1:
             g.playerBoards[player].disp()
             
-            
+    '''        
     def getPlayerRowSelection(self, player=1, selectedTiles=[]):
         #structure definitely needs to be reworked
         remainingTiles = selectedTiles
@@ -406,10 +429,10 @@ class game():
             print(inputMessage)
             targetRow = self.checkInput(validChars=['f'] + list(range(1,6)))              
             [inputMessage, remainingTiles] = self.playerBoards[player].addTiles(remainingTiles, targetRow)
-        
+    '''    
         
     
-    def getPlayerTileSelection(self, player=1):
+    def getPlayerInput(self, player=1):
         #should this be a method of publicBoard?
         #here the validity checking is done within game,
         #but for load row selection the checkign is done within playerBoard
@@ -419,30 +442,84 @@ class game():
         selectedTiles = []
         print('\nPlayer {} it is your turn.'.format(player+1))
         
-        while len(selectedTiles) == 0:
-            print("Enter the number of the factory you want to select or enter"
-                  " \n'c' to pick from the center.")
             
+        print("Enter the number of the factory you want to select or enter"
+          " \n'c' to pick from the center. If you already know the color\n"
+          "and row you want, you can enter that now")
+        
        
-            pileSelection = self.checkInput(validChars = self.publicBoard.getValidChoices())
-                        
+        errorMessage = '_'
+        while len(errorMessage) > 0:
+            firstInput = self.checkInput(maxLength = 3)
+            pileSelection = list(firstInput)[0]         
+            errorMessage = self.publicBoard.validatePileChoice(pileSelection)
+            print(errorMessage)
             
+
+        if len(firstInput) > 1:
+            colorSelection = firstInput[1]     
+            errorMessage = self.publicBoard.validateColorChoice(pileSelection, colorSelection)                 
+        else:
+            errorMessage = '_'
+
+        while len(errorMessage) > 0:               
             print('Ok, what color? ')
-            colorSelection = 0
-            colorSelection = self.checkInput(validChars = range(1,6)) #**what to do if they pick a missing color?
-            
-                
-            if pileSelection == 'c':
-                pileNum = -1
-            else:
-                pileNum = int(pileSelection) - 1
-            
-            selectedTiles = self.publicBoard.selectTiles(pileNum, int(colorSelection))
+            colorSelection = self.checkInput(validChars = range(1,6), maxLength = 1)[0] #add error checking
+            errorMessage = self.publicBoard.validateColorChoice(pileSelection, colorSelection)
+
+        
+
+        
+        selectedTiles = self.publicBoard.selectTiles(pileSelection, int(colorSelection))
         
         print('You picked {0}'.format(selectedTiles))
+    
+        
+        remainingTiles = selectedTiles
+        
+        if len(firstInput) > 2:
+            targetRow = firstInput[2]
+        else:       
+            inputMessage = 'Which row do you want to put them in?'
+            while len(remainingTiles) > 0:
+                print(inputMessage)
+                targetRow = self.checkInput(validChars=['f'] + list(range(1,6)))[0]              
+                
+                
+        [inputMessage, remainingTiles] = self.playerBoards[player].addTiles(remainingTiles, targetRow) #add error checking?
         
         
-        return(selectedTiles)
+        
+        
+        
+    @staticmethod
+    def checkInput(message = '> ', validChars = [], maxLength = 1):
+        validChars = [str(char) for char in validChars]
+        validChars.append('q')
+        
+        errorMessage = '_'
+        while len(errorMessage) > 0:
+            inVals = input(message).split(',')
+    
+            errorMessage = ''
+            if len(inVals) > maxLength:
+                errorMessage = 'Too many inputs! Try again.'
+            elif len(validChars) > 1 and any([char not in validChars for char in inVals]): #should each one have a separate list of valid chars?
+                errorMessage = 'Some characters not valid! Try again.'
+        
+        
+            if inVals[0] == 'q':
+                    sys.exit(0)
+            print(errorMessage)
+            
+        return(inVals)
+        
+    
+
+        
+        
+        
+        
                     
     
 #INITIAL SETUP            
@@ -456,6 +533,7 @@ class game():
 if __name__ == '__main__':
     g=game(numPlayers = NUM_PLAYERS)
     g.mainLoop()
+    #g.checkInput(message='>', validChars = [1,2,3], maxLength=3)
 '''
 x = g.playerBoards[0]
 x.load[0]=[4]
