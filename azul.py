@@ -419,9 +419,9 @@ class game():
     def getPlayerInput(self, player=1):
                 
             
-        print("Enter the number of the factory you want to select or enter"
+        print("\nEnter the number of the factory you want to select or enter"
           " \n'c' to pick from the center. If you already know the color\n"
-          "and row you want, you can enter that now")
+          "and row you want, you can also enter those numbers, separated by commas.")
         
        
         errorMessage = '_'
@@ -429,13 +429,13 @@ class game():
             firstInput = self.checkInput(maxLength = 3)
             pileSelection = list(firstInput)[0]         
             errorMessage = self.publicBoard.validateChoices(pileSelection)
-            print(errorMessage)
+            if len(errorMessage) > 0: print(errorMessage)
             
 
         if len(firstInput) > 1:
             colorSelection = firstInput[1]     
             errorMessage = self.publicBoard.validateChoices(pileSelection, colorSelection)
-            print(errorMessage)                 
+            if len(errorMessage) > 0: print(errorMessage)
         else:
             errorMessage = '_'
 
@@ -443,7 +443,7 @@ class game():
             print('Which color would you like from pile {}?'.format(pileSelection))
             colorSelection = self.checkInput(validChars = range(1,6), maxLength = 1)[0] #add error checking
             errorMessage = self.publicBoard.validateChoices(pileSelection, colorSelection)
-            print(errorMessage)
+            if len(errorMessage) > 0: print(errorMessage)
         
 
         
@@ -454,7 +454,7 @@ class game():
         if len(firstInput) > 2:
             targetRow = firstInput[2]
             errorMessage = self.playerBoards[player].validateChoices(selectedTiles, targetRow)
-            print(errorMessage)
+            if len(errorMessage) > 0: print(errorMessage) 
         else:
             errorMessage = '_'
             
@@ -462,7 +462,7 @@ class game():
             print('Which row do you want to put {} in?'.format(selectedTiles))
             targetRow = self.checkInput(validChars=['f'] + list(range(1,6)), maxLength = 1)[0] 
             errorMessage = self.playerBoards[player].validateChoices(selectedTiles, targetRow)
-            print(errorMessage)
+            if len(errorMessage) > 0: print(errorMessage)
             
         
         remainingTiles = self.playerBoards[player].loadTiles(selectedTiles, targetRow) #add error checking?
@@ -475,7 +475,7 @@ class game():
             while len(errorMessage) > 0:
                  targetRow = self.checkInput(validChars=['f'] + list(range(1,6)), maxLength = 1)[0]
                  errorMessage = self.playerBoards[player].validateChoices(remainingTiles, targetRow)              
-                 print(errorMessage)
+                 if len(errorMessage) > 0: print(errorMessage)
             remainingTiles = self.playerBoards[player].loadTiles(remainingTiles, targetRow)      
                  
                 
@@ -506,7 +506,7 @@ class game():
                     print('CUSTOM EXIT FAILED')                    
                     sys.exit(0) #backup
                     
-            print(errorMessage)
+            if len(errorMessage) > 0: print(errorMessage)
             
         return(inVals)
                     
